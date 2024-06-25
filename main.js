@@ -1798,6 +1798,17 @@ class Parcel extends utils.Adapter {
     if (id === 'hermes' && data.sendungen) {
       try {
         const sendungsArray = data.sendungen.map((sendung) => {
+          if(sendung.shipmentType == 'IN_UNKNOWN') {
+            const sendungsObject = {
+              id: sendung.barcode,
+              tracking: '',
+              name: 'Unbekannt',
+              status: 'Unbekannt',
+              source: 'Hermes',
+            };
+            return sendungsObject;
+          }
+
           let name = sendung.description;
           if (sendung.sender && sendung.sender.lastname) {
             name = name + ' ' + sendung.sender.lastname;
