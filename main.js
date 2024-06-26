@@ -808,7 +808,13 @@ class Parcel extends utils.Adapter {
         data: qs.stringify(form),
       })
         .then(async (res) => {
-          this.log.debug(JSON.stringify(res.data));
+          this.log.silly(JSON.stringify(res.data));
+          this.log.debug('Username successfully posted');
+          const form = this.extractHidden(res.data);
+          if (Object.keys(form).length <= 3) {
+            this.log.error('Password form to short');
+            this.log.error(res.data);
+          }
           return res.data;
         })
         .catch((error) => {
@@ -824,8 +830,13 @@ class Parcel extends utils.Adapter {
         });
       form = this.extractHidden(body);
     }
-    form.password = this.config.amzpassword;
+    delete form['='];
+    delete form['undefined'];
+    this.log.debug('Post form : ' + JSON.stringify(form));
+
     form.rememberMe = 'true';
+    form.password = this.config.amzpassword;
+    this.log.debug('Post with password');
     await this.requestClient({
       method: 'post',
       url: 'https://www.amazon.de/ap/signin',
@@ -837,10 +848,11 @@ class Parcel extends utils.Adapter {
         'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
         referer: 'https://www.amazon.de/ap/signin',
       },
-      data: qs.stringify(form),
+      data: form,
     })
       .then(async (res) => {
-        this.log.debug(JSON.stringify(res.data));
+        this.log.silly(JSON.stringify(res.data));
+        this.log.debug('Password successfully posted');
         if (res.data.indexOf('js-yo-main-content') !== -1) {
           this.log.info('Relogin to Amazon successful');
           this.sessions['amz'] = true;
@@ -869,7 +881,8 @@ class Parcel extends utils.Adapter {
             data: qs.stringify(form),
           })
             .then(async (res) => {
-              this.log.debug(JSON.stringify(res.data));
+              this.log.silly(JSON.stringify(res.data));
+              this.log.debug('MFA successfully posted');
               if (res.data.indexOf('js-yo-main-content') !== -1) {
                 this.log.info('Login to Amazon successful');
                 this.sessions['amz'] = true;
@@ -884,7 +897,9 @@ class Parcel extends utils.Adapter {
                 });
                 return;
               }
-              this.log.error('MFA: Login to Amazon failed, please login manually to Amazon');
+              this.log.error(
+                'MFA: Login to Amazon failed. Enter correct MFA Code from SMS or App. Or check you account and login manually to Amazon',
+              );
               this.setState('info.connection', false, true);
             })
             .catch(async (error) => {
@@ -918,7 +933,37 @@ class Parcel extends utils.Adapter {
           this.log.error('Zurücksetzen des Passworts erforderlich');
           return;
         }
+        if (res.data.indexOf('auth-select-device-form"') !== -1) {
+          this.log.info('SMS code or call form found. If you do not receive a SMS then login to Amazon and trigger the SMS code');
+          const form = this.extractHidden(res.data);
+          await this.requestClient({
+            method: 'post',
+            url: 'https://www.amazon.de/ap/mfa/new-otp?ie=UTF8',
+            headers: {
+              accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              'content-type': 'application/x-www-form-urlencoded',
+              origin: 'https://www.amazon.de',
+              'accept-language': 'de-de',
+              'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+              referer: 'https://www.amazon.de/ap/mfa/new-otp?ie=UTF8',
+            },
+            data: form,
+          })
+            .then(async (res) => {
+              this.log.silly(JSON.stringify(res.data));
+              this.log.debug('SMS code or call form successfully posted');
+            })
+            .catch(async (error) => {
+              this.log.error('Failed to post SMS code or call form');
+              if (error.response) {
+                this.log.error(JSON.stringify(error.response.data));
+              }
+            });
+          return;
+        }
+
         this.log.error('Unknown Error: Login to Amazon failed, please login to Amazon and check your credentials');
+        this.log.debug(res.data);
         this.setState('info.connection', false, true);
         return;
       })
