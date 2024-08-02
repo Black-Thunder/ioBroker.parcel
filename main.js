@@ -1890,7 +1890,7 @@ class Parcel extends utils.Adapter {
     if (id === 'hermes' && data.sendungen) {
       try {
         const sendungsArray = data.sendungen.map((sendung) => {
-          if(sendung.shipmentType == 'IN_UNKNOWN') {
+          if (sendung.shipmentType == 'IN_UNKNOWN') {
             const sendungsObject = {
               id: sendung.barcode,
               tracking: '',
@@ -1906,7 +1906,7 @@ class Parcel extends utils.Adapter {
             name = name + ' ' + sendung.sender.lastname;
           }
           const sendungsObject = {
-            id: sendung.id,
+            id: sendung.barcode,
             tracking: sendung.order,
             name: name,
             status: sendung.status.text.longText || '',
@@ -2010,7 +2010,7 @@ class Parcel extends utils.Adapter {
           }
           const sendungsObject = {
             id: sendung.FTrackNo,
-            name: sendung.FTrackInfoId,
+            name: sendung.FRemark,
             status: sendung.FLastEvent ? sendung.FLastEvent.z : '',
             source: '17tuser',
           };
