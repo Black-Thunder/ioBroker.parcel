@@ -85,7 +85,15 @@ class Parcel extends utils.Adapter {
 
     if (this.config.dhlusername && this.config.dhlpassword) {
       this.log.info('Login to DHL');
-      await this.loginDhlNew();
+      const dhlSessionState = await this.getStateAsync('auth.dhlSession');
+      if (dhlSessionState && dhlSessionState.val) {
+        this.log.info('Use existing DHL session. If this fails please delete auth.dhlSession');
+        this.sessions['dhl'] = JSON.parse(dhlSessionState.val);
+        await this.refreshToken();
+        await this.createDHLStates();
+      } else {
+        await this.loginDhlNew();
+      }
     }
 
     if (this.config.dpdusername && this.config.dpdpassword) {
@@ -580,6 +588,18 @@ class Parcel extends utils.Adapter {
           this.sessions['dhl'] = res.data;
           this.setState('info.connection', true, true);
           this.setState('auth.cookie', JSON.stringify(this.cookieJar.toJSON()), true);
+          await this.extendObject('auth.dhlSession', {
+            type: 'state',
+            common: {
+              name: 'DHL Session',
+              type: 'string',
+              role: 'json',
+              read: true,
+              write: false,
+            },
+            native: {},
+          });
+          this.setState('auth.dhlSession', JSON.stringify(res.data), true);
           await this.createDHLStates();
         })
         .catch(async (error) => {
@@ -1527,9 +1547,13 @@ class Parcel extends utils.Adapter {
           return [];
         })
         .catch((error) => {
-          this.log.error('Failed to get https://www.dhl.de/int-verfolgen/data/search?noRedirect=true&language=de&cid=app');
-          this.log.error(error);
-          error.response && this.log.error(JSON.stringify(error.response.data));
+          if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
+            this.log.info('DHL is not available. Maybe the DHL service down or overloaded at the moment');
+          } else {
+            this.log.error('Failed to get https://www.dhl.de/int-verfolgen/data/search?noRedirect=true&language=de&cid=app');
+            this.log.error(error);
+            error.response && this.log.error(JSON.stringify(error.response.data));
+          }
           return [];
         });
     }
@@ -2605,6 +2629,7 @@ class Parcel extends utils.Adapter {
             await this.cookieJar.setCookie('dhli=' + res.data.id_token + '; path=/; domain=dhl.de', 'https:/dhl.de');
             await this.cookieJar.setCookie('dhli=' + res.data.id_token + '; path=/; domain=www.dhl.de', 'https:/www.dhl.de');
             this.setState('auth.cookie', JSON.stringify(this.cookieJar.toJSON()), true);
+            this.setState('auth.dhl', JSON.stringify(res.data), true);
             this.setState('info.connection', true, true);
           })
           .catch((error) => {
@@ -2739,13 +2764,19 @@ class Parcel extends utils.Adapter {
    * Is called when adapter shuts down - callback has to be called under any circumstances!
    * @param {() => void} callback
    */
-  onUnload(callback) {
+  async onUnload(callback) {
     try {
       this.setState('info.connection', false, true);
       this.reLoginTimeout && clearTimeout(this.reLoginTimeout);
       this.refreshTokenTimeout && clearTimeout(this.refreshTokenTimeout);
       this.updateInterval && clearInterval(this.updateInterval);
       this.refreshTokenInterval && clearInterval(this.refreshTokenInterval);
+      //get adapter settings and set captcha to null
+      if (this.config.dhlCode) {
+        const adapterSettings = await this.getForeignObjectAsync('system.adapter.' + this.namespace);
+        adapterSettings.native.dhlCode = null;
+        await this.setForeignObjectAsync('system.adapter.' + this.namespace, adapterSettings);
+      }
       callback();
     } catch (e) {
       this.log.error('Error onUnload: ' + e);
