@@ -76,7 +76,8 @@ class Parcel extends utils.Adapter {
     }
     this.requestClient = axios.create({
       withCredentials: true,
-      httpsAgent: new HttpsCookieAgent({ cookies: { jar: this.cookieJar } }),
+
+      httpsAgent: new HttpsCookieAgent({ cookies: { jar: this.cookieJar }, rejectUnauthorized: false }),
     });
     if (this.config.amzusername && this.config.amzpassword) {
       this.log.info('Login to Amazon');
@@ -1778,9 +1779,13 @@ class Parcel extends utils.Adapter {
                 this.ignoredPath.push(element.path);
               }
             }
-            this.log.error(element.url);
-            this.log.error(error);
-            error.response && this.log.error(JSON.stringify(error.response.data));
+            if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
+              this.log.info(id + ' is not available. Maybe the service down or overloaded at the moment');
+            } else {
+              this.log.error(element.url);
+              this.log.error(error);
+              error.response && this.log.error(JSON.stringify(error.response.data));
+            }
           });
       }
     }
