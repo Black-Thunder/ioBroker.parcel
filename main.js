@@ -23,6 +23,7 @@ const { tmpdir } = require('os');
 const dhlDecrypt = require('./lib/dhldecrypt');
 const { loginDhlNew: dhlLoginNew } = require('./lib/dhlLogin');
 const { loginDPD: dpdLoginSoap, fetchDPDParcels: dpdFetchParcels } = require('./lib/dpdLogin');
+const { classifyGlsDeliveryStatus } = require('./lib/glsStatus');
 class Parcel extends utils.Adapter {
   /**
    * @param {Partial<utils.AdapterOptions>} [options={}]
@@ -2302,37 +2303,9 @@ class Parcel extends utils.Adapter {
           }
         }
         if (id === 'gls') {
-          // Neues Backend gibt keinen Enum-Status mehr — stattdessen:
-          //   deliveredAt (truthy) → DELIVERED
-          //   hasDeliveryAttemptFailed → ERROR
-          //   latestStatusText (deutsche Freitext-Statusmeldung) → per Substring-Match
-          if (sendung.deliveredAt) {
-            return this.delivery_status.DELIVERED;
-          }
-          if (sendung.hasDeliveryAttemptFailed) {
-            return this.delivery_status.ERROR;
-          }
-          const t = String(sendung.latestStatusText || '').toLowerCase();
-          if (!t) {
-            return this.delivery_status.UNKNOWN;
-          }
-          if (t.includes('zugestellt') || t.includes('delivered')) {
-            return this.delivery_status.DELIVERED;
-          }
-          if (t.includes('in der zustellung') || t.includes('zustellfahrzeug') || t.includes('out for delivery')) {
-            return this.delivery_status.OUT_FOR_DELIVERY;
-          }
-          if (
-            t.includes('paketzentrum') ||
-            t.includes('umschlagbetrieb') ||
-            t.includes('transport') ||
-            t.includes('unterwegs') ||
-            t.includes('eingegangen')
-          ) {
-            return this.delivery_status.IN_TRANSIT;
-          }
-          if (t.includes('vorangemeldet') || t.includes('label') || t.includes('avisiert')) {
-            return this.delivery_status.REGISTERED;
+          const glsStatus = classifyGlsDeliveryStatus(sendung, this.delivery_status);
+          if (glsStatus !== undefined) {
+            return glsStatus;
           }
         }
         if (id === 'amz' && sendung.detailedState && sendung.detailedState.shortStatus) {
